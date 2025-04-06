@@ -1,22 +1,39 @@
 const net = require("net");
 
-
 console.log("Logs from your program will appear here!");
 
-
 const server = net.createServer((socket) => {
-    // socket.write("HTTP/1.1 200 OK\r\n\r\n");
-    const response = 
-    "HTTP/1.1 200 OK\r\n" +
-    "Content-Type: text/plain\r\n" +
-    "Content-Length: 13\r\n" +
-    "\r\n" +
-    "Hello, world!";
+  socket.on("data", (data) => {
+    const request = data.toString();
+    const [requestLine] = request.split("\r\n");
+    const [method, path] = requestLine.split(" ");
 
-    socket.write(response);
-//   socket.on("close", () => {
+    if (method === "GET" && path === "/") {
+      const body = "Hello, world!";
+      const response =
+        "HTTP/1.1 200 OK\r\n" +
+        "Content-Type: text/plain\r\n" +
+        `Content-Length: ${body.length}\r\n` +
+        "\r\n" +
+        body;
+      socket.write(response);
+    } else {
+      const body = "Not Found";
+      const response =
+        "HTTP/1.1 404 Not Found\r\n" +
+        "Content-Type: text/plain\r\n" +
+        `Content-Length: ${body.length}\r\n` +
+        "\r\n" +
+        body;
+      socket.write(response);
+    }
+
     socket.end();
-//   });
+  });
+
+  socket.on("close", () => {
+    socket.end();
+  });
 });
 
 server.listen(4221, "localhost");
