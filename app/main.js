@@ -5,10 +5,18 @@ console.log("Logs from your program will appear here!");
 
 
 const server = net.createServer((socket) => {
-  socket.write("HTTP/1.1 200 OK\r\n\r\n");
-  socket.on("close", () => {
+    // socket.write("HTTP/1.1 200 OK\r\n\r\n");
+    const response = 
+    "HTTP/1.1 200 OK\r\n" +
+    "Content-Type: text/plain\r\n" +
+    "Content-Length: 13\r\n" +
+    "\r\n" +
+    "Hello, world!";
+
+    socket.write(response);
+//   socket.on("close", () => {
     socket.end();
-  });
+//   });
 });
 
 server.listen(4221, "localhost");
@@ -22,7 +30,9 @@ server.listen(4221, "localhost");
 
 
 
-
+//  TCP/IP- https://www.cloudflare.com/en-ca/learning/ddos/glossary/tcp-ip/
+//  socket.write("HTTP/1.1 200 OK\r\n\r\n"); write coket return 200 OK
+//  CRLF - https://developer.mozilla.org/en-US/docs/Glossary/CRLF
 
 
 
