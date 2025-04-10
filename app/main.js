@@ -19,6 +19,7 @@ const server = net.createServer((socket) => {
         "\r\n" +
         body;
       socket.write(response);
+      socket.end();
     } else if (method === "GET" && pathLine.startsWith("/echo/")) {
       const body = pathLine.slice("/echo/".length);
       const response =
@@ -28,6 +29,7 @@ const server = net.createServer((socket) => {
         "\r\n" +
         body;
       socket.write(response);
+      socket.end();
     } else if (method === "GET" && pathLine === "/user-agent") {
       const userAgentLine = lines.find((line) => line.toLowerCase().startsWith("user-agent:"));
       const userAgent = userAgentLine ? userAgentLine.slice("User-Agent: ".length).trim() : "";
@@ -38,9 +40,10 @@ const server = net.createServer((socket) => {
         "\r\n" +
         userAgent;
       socket.write(response);
+      socket.end();
     } else if (method === "GET" && pathLine.startsWith("/files/")) {
       const fileName = pathLine.slice("/files/".length);
-      const baseDir = process.env.DIR || "."; // fallback if DIR is not set
+      const baseDir = process.env.DIR || ".";
       const filePath = path.join(baseDir, fileName);
 
       fs.readFile(filePath, (err, fileContent) => {
@@ -58,13 +61,12 @@ const server = net.createServer((socket) => {
             "HTTP/1.1 200 OK\r\n" +
             "Content-Type: application/octet-stream\r\n" +
             `Content-Length: ${fileContent.length}\r\n` +
-            "\r\n`;
+            "\r\n";
           socket.write(response);
-          socket.write(fileContent); // send buffer directly
+          socket.write(fileContent);
         }
         socket.end();
       });
-      return; // prevent calling socket.end() early
     } else {
       const body = "Not Found";
       const response =
@@ -97,6 +99,7 @@ server.listen(4221, "localhost");
 
 
 
+
 //  TCP/IP- https://www.cloudflare.com/en-ca/learning/ddos/glossary/tcp-ip/
 //  socket.write("HTTP/1.1 200 OK\r\n\r\n"); write coket return 200 OK
 //  CRLF - https://developer.mozilla.org/en-US/docs/Glossary/CRLF
@@ -107,6 +110,8 @@ server.listen(4221, "localhost");
 // Response Body - https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#response_body
 // User-Agent - https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/User-Agent
 // event loop/execution model - https://developer.mozilla.org/en-US/docs/Web/JavaScript/EventLoop
+// /files/{filename} - https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/GET#syntax
+
 
 
 
