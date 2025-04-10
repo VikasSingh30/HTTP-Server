@@ -5,8 +5,8 @@ console.log("Logs from your program will appear here!");
 const server = net.createServer((socket) => {
   socket.on("data", (data) => {
     const request = data.toString();
-    const [requestLine] = request.split("\r\n");
-    const [method, path] = requestLine.split(" ");
+    const lines = request.split("\r\n");
+    const [method, path] = lines[0].split(" ");
 
     if (method === "GET" && path === "/") {
       const body = "Hello, world!";
@@ -18,7 +18,18 @@ const server = net.createServer((socket) => {
         body;
       socket.write(response);
     } else if (method === "GET" && path.startsWith("/echo/")) {
-      const body = path.slice("/echo/".length); // Extract `{str}` from `/echo/{str}`
+      const body = path.slice("/echo/".length);
+      const response =
+        "HTTP/1.1 200 OK\r\n" +
+        "Content-Type: text/plain\r\n" +
+        `Content-Length: ${body.length}\r\n` +
+        "\r\n" +
+        body;
+      socket.write(response);
+    } else if (method === "GET" && path === "/user-agent") {
+      const userAgentLine = lines.find((line) => line.toLowerCase().startsWith("user-agent:"));
+      const userAgent = userAgentLine ? userAgentLine.slice("User-Agent: ".length) : "";
+      const body = userAgent.trim();
       const response =
         "HTTP/1.1 200 OK\r\n" +
         "Content-Type: text/plain\r\n" +
@@ -46,6 +57,7 @@ const server = net.createServer((socket) => {
 });
 
 server.listen(4221, "localhost");
+
 
 
 
