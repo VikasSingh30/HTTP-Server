@@ -167,148 +167,60 @@ server.listen(4221, "localhost");
 // event loop/execution model - https://developer.mozilla.org/en-US/docs/Web/JavaScript/EventLoop
 // /files/{filename} - https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/GET#syntax
 // POST /files/{filename} - https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/POST#syntax
+// compression - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Encoding
+// Chunked Transfer Encoding - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Transfer-Encoding
+// Query Params - https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/GET#syntax
+// Cookies - https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies
+// CORS - https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
+// TLS - https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview#https
+// HTTP/2 - https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview#http2
+// WebSockets - https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API
+// Basic Authentication - https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
+// Range requests - https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests
+// E-Tag caching - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
+// Persistent Connections - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Connection
+
+// Chunked Transfer Encoding
+// In this challenge extension, you'll implement chunked transfer encoding to stream response bodies when the total size isn't known beforehand.
+// Along the way, you'll learn about the Transfer-Encoding: chunked header, chunk formatting rules, handling streaming data and more.
 
 
+// Query Params
+// In this challenge extension, you'll add support for parsing query params from request URLs.
+// Along the way, you'll learn about query param syntax, parsing key-value pairs (handling & and =), performing URL decoding and more.
 
+// Cookies
+// In this challenge extension, you'll implement cookie-based session management to maintain user state across multiple HTTP requests.
+// Along the way, you'll learn about the Cookie & Set-Cookie headers (including attributes like Expires, HttpOnly, Secure, SameSite) and more.
 
+// CORS
+// In this challenge extension, you'll implement CORS (Cross-Origin Resource Sharing) to allow web browsers from different origins to securely access your server's resources.
+// Along the way, you'll learn about the Origin request header, preflight CORS requests, various Access-Control-Allow-* response headers and more.
 
+// TLS
+// In this challenge extension, you'll add support for secure HTTPS connections by integrating TLS (Transport Layer Security).
+// Along the way, you'll learn about managing certificates, the TLS handshake process, how to use TLS libraries/modules and more.
 
+// HTTP/2
+// In this challenge extension, you'll upgrade your server to support the HTTP/2 protocol.
+// Along the way, you'll learn about the Upgrade header, HTTP/2 concepts like binary framing, streams, multiplexing, flow control and more.
 
-// const net = require("net");
-// const fs = require("fs");
-// const zlib = require("zlib");
-// const path = require("path");
+// WebSockets
+// In this challenge extension, you'll extend your server to handle WebSocket connections for real-time, bidirectional communication.
+// Along the way, you'll learn about the HTTP Upgrade mechanism, the WebSocket handshake process, the 101 Switching Protocols status code and more.
 
-// const PORT = 4221;
-// const HOST = "0.0.0.0";
-// const DIRECTORY = "/tmp/";
-// const COMPRESSION_HEADER = "Accept-Encoding";
-// const compressionMethodsAllowed = {
-//   gzip: true,
-// };
+// Basic Authentication
+// In this challenge extension, you'll implement HTTP Basic Authentication to password-protect specific server resources.
+// Along the way, you'll learn about the Authorization & WWW-Authenticate headers, the 401 Unauthorized status code and more.
 
-// console.log("Logs from your program will appear here!");
+// Range requests
+// In this challenge extension, you'll add support for HTTP range requests to your server.
+// Along the way, you'll learn about the Range and Content-Range headers, how to handle partial content requests and more.
 
-// const server = net.createServer((socket) => {
-//   socket.on("data", (chunk) => {
-//     const data = chunk.toString();
-//     const lines = data.split("\r\n");
-//     const requestLine = lines[0];
-//     const headers = extractHeaders(lines);
-//     const method = requestLine.split(" ")[0];
-//     const url = requestLine.split(" ")[1];
+// E-Tag caching
+// In this challenge extension, you'll implement E-Tag caching in your HTTP server.
+// Along the way, you'll learn about the ETag header, the If-None-Match header, and how E-Tags are used for caching HTTP response.
 
-//     if (url.startsWith("/echo/")) {
-//       const echoText = url.split("/echo/")[1];
-//       const acceptEncoding = headers[COMPRESSION_HEADER] || "";
-//       for (let encoding of acceptEncoding.split(",")) {
-//         encoding = encoding.trim();
-//         if (compressionMethodsAllowed[encoding]) {
-//           const gzipped = zlib.gzipSync(echoText);
-//           writeResponse(socket, 200, "OK", {
-//             "Content-Type": "text/plain",
-//             "Content-Encoding": encoding,
-//             "Content-Length": gzipped.length,
-//           }, gzipped);
-//           return;
-//         }
-//       }
-
-//       writeResponse(socket, 200, "OK", {
-//         "Content-Type": "text/plain",
-//         "Content-Length": echoText.length,
-//       }, echoText);
-//     }
-
-//     else if (url === "/") {
-//       writeResponse(socket, 200, "OK", {
-//         "Content-Type": "text/plain",
-//         "Content-Length": "0"
-//       }, "");
-//     }
-
-//     else if (url === "/user-agent") {
-//       const userAgent = headers["User-Agent"] || "";
-//       writeResponse(socket, 200, "OK", {
-//         "Content-Type": "text/plain",
-//         "Content-Length": userAgent.length,
-//       }, userAgent);
-//     }
-
-//     else if (url.startsWith("/files/")) {
-//       const fileName = url.split("/files/")[1];
-//       const filePath = path.join(DIRECTORY, fileName);
-
-//       if (method === "GET") {
-//         if (fs.existsSync(filePath)) {
-//           const fileData = fs.readFileSync(filePath);
-//           writeResponse(socket, 200, "OK", {
-//             "Content-Type": "application/octet-stream",
-//             "Content-Length": fileData.length,
-//           }, fileData);
-//         } else {
-//           writeResponse(socket, 404, "Not Found", {
-//             "Content-Type": "text/plain",
-//             "Content-Length": "0"
-//           }, "");
-//         }
-//       }
-
-//       else if (method === "POST") {
-//         const body = lines[lines.length - 1];
-//         try {
-//           fs.writeFileSync(filePath, body);
-//           writeResponse(socket, 201, "Created", {
-//             "Content-Type": "text/plain",
-//             "Content-Length": "0"
-//           }, "");
-//         } catch (e) {
-//           writeResponse(socket, 500, "Internal Server Error", {
-//             "Content-Type": "text/plain",
-//             "Content-Length": "0"
-//           }, "");
-//         }
-//       }
-//     }
-
-//     else {
-//       writeResponse(socket, 404, "Not Found", {
-//         "Content-Type": "text/plain",
-//         "Content-Length": "0"
-//       }, "");
-//     }
-
-//     socket.end();
-//   });
-
-//   socket.on("error", (err) => {
-//     console.error("Socket error:", err.message);
-//   });
-// });
-
-// function writeResponse(socket, statusCode, statusText, headers, body) {
-//   const statusLine = `HTTP/1.1 ${statusCode} ${statusText}\r\n`;
-//   let headerLines = "";
-//   for (const [key, value] of Object.entries(headers)) {
-//     headerLines += `${key}: ${value}\r\n`;
-//   }
-
-//   const responseBody = Buffer.isBuffer(body) ? body : Buffer.from(body);
-//   socket.write(statusLine + headerLines + "\r\n");
-//   socket.write(responseBody);
-// }
-
-// function extractHeaders(lines) {
-//   const headers = {};
-//   for (let i = 1; i < lines.length; i++) {
-//     const line = lines[i];
-//     if (line === "") break;
-//     const [key, value] = line.split(": ");
-//     if (key && value) headers[key] = value;
-//   }
-//   return headers;
-// }
-
-// server.listen(PORT, HOST, () => {
-//   console.log(`Server is listening on ${HOST}:${PORT}`);
-// });
+// Persistent Connections - 
+// In this challenge extension, you'll extend your HTTP server to support persistent connections.
+// Along the way, you'll learn about persistent connections, the Connection header, how a HTTP client can re-use a TCP connection for multiple requests and more.
