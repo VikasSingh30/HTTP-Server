@@ -17,6 +17,15 @@ const server = net.createServer((socket) => {
         "\r\n" +
         body;
       socket.write(response);
+    } else if (method === "GET" && path.startsWith("/echo/")) {
+      const body = path.slice("/echo/".length); // Extract `{str}` from `/echo/{str}`
+      const response =
+        "HTTP/1.1 200 OK\r\n" +
+        "Content-Type: text/plain\r\n" +
+        `Content-Length: ${body.length}\r\n` +
+        "\r\n" +
+        body;
+      socket.write(response);
     } else {
       const body = "Not Found";
       const response =
@@ -47,10 +56,15 @@ server.listen(4221, "localhost");
 
 
 
+
 //  TCP/IP- https://www.cloudflare.com/en-ca/learning/ddos/glossary/tcp-ip/
 //  socket.write("HTTP/1.1 200 OK\r\n\r\n"); write coket return 200 OK
 //  CRLF - https://developer.mozilla.org/en-US/docs/Glossary/CRLF
-
+    // Summary:
+    // We extract method and path from the request.
+    // If path is /, we return 200 OK.
+   // For anything else (like /orange), we return 404 Not Found.
+// Response Body - https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#response_body
 
 
 
