@@ -15,41 +15,45 @@ if (dirIndex !== -1 && args[dirIndex + 1]) {
 const server = net.createServer((socket) => {
   socket.on("data", (data) => {
     const request = data.toString();
-    const lines = request.split("\r\n");
+    const [headerSection, body] = request.split("\r\n\r\n");
+    const lines = headerSection.split("\r\n");
+
     const [method, pathLine] = lines[0].split(" ");
 
-    if (method === "GET" && pathLine === "/") {
-      const body = "Hello, world!";
-      const response =
-        "HTTP/1.1 200 OK\r\n" +
-        "Content-Type: text/plain\r\n" +
-        `Content-Length: ${body.length}\r\n` +
-        "\r\n" +
-        body;
-      socket.write(response);
-      socket.end();
-    } else if (method === "GET" && pathLine.startsWith("/echo/")) {
-      const body = pathLine.slice("/echo/".length);
-      const response =
-        "HTTP/1.1 200 OK\r\n" +
-        "Content-Type: text/plain\r\n" +
-        `Content-Length: ${body.length}\r\n` +
-        "\r\n" +
-        body;
-      socket.write(response);
-      socket.end();
-    } else if (method === "GET" && pathLine === "/user-agent") {
-      const userAgentLine = lines.find((line) => line.toLowerCase().startsWith("user-agent:"));
-      const userAgent = userAgentLine ? userAgentLine.slice("User-Agent: ".length).trim() : "";
-      const response =
-        "HTTP/1.1 200 OK\r\n" +
-        "Content-Type: text/plain\r\n" +
-        `Content-Length: ${userAgent.length}\r\n` +
-        "\r\n" +
-        userAgent;
-      socket.write(response);
-      socket.end();
-    } else if (method === "GET" && pathLine.startsWith("/files/")) {
+    const headers = {};
+    lines.slice(1).forEach((line) => {
+      const [key, value] = line.split(": ");
+      headers[key.toLowerCase()] = value;
+    });
+
+    if (method === "POST" && pathLine.startsWith("/files/")) {
+      const fileName = pathLine.slice("/files/".length);
+      const filePath = path.join(baseDir, fileName);
+      const contentLength = parseInt(headers["content-length"] || "0");
+
+      // Extract exact body based on Content-Length
+      const actualBody = body.slice(0, contentLength);
+
+      fs.writeFile(filePath, actualBody, (err) => {
+        if (err) {
+          const body = "Internal Server Error";
+          const response =
+            "HTTP/1.1 500 Internal Server Error\r\n" +
+            "Content-Type: text/plain\r\n" +
+            `Content-Length: ${body.length}\r\n` +
+            "\r\n" +
+            body;
+          socket.write(response);
+        } else {
+          const response = "HTTP/1.1 201 Created\r\n\r\n";
+          socket.write(response);
+        }
+        socket.end();
+      });
+    }
+
+    // GET /files/{filename}
+    else if (method === "GET" && pathLine.startsWith("/files/")) {
       const fileName = pathLine.slice("/files/".length);
       const filePath = path.join(baseDir, fileName);
 
@@ -74,7 +78,49 @@ const server = net.createServer((socket) => {
         }
         socket.end();
       });
-    } else {
+    }
+
+    // /echo/{str}
+    else if (method === "GET" && pathLine.startsWith("/echo/")) {
+      const body = pathLine.slice("/echo/".length);
+      const response =
+        "HTTP/1.1 200 OK\r\n" +
+        "Content-Type: text/plain\r\n" +
+        `Content-Length: ${body.length}\r\n` +
+        "\r\n" +
+        body;
+      socket.write(response);
+      socket.end();
+    }
+
+    // /user-agent
+    else if (method === "GET" && pathLine === "/user-agent") {
+      const userAgent = headers["user-agent"] || "";
+      const response =
+        "HTTP/1.1 200 OK\r\n" +
+        "Content-Type: text/plain\r\n" +
+        `Content-Length: ${userAgent.length}\r\n` +
+        "\r\n" +
+        userAgent;
+      socket.write(response);
+      socket.end();
+    }
+
+    // GET /
+    else if (method === "GET" && pathLine === "/") {
+      const body = "Hello, world!";
+      const response =
+        "HTTP/1.1 200 OK\r\n" +
+        "Content-Type: text/plain\r\n" +
+        `Content-Length: ${body.length}\r\n` +
+        "\r\n" +
+        body;
+      socket.write(response);
+      socket.end();
+    }
+
+    // 404
+    else {
       const body = "Not Found";
       const response =
         "HTTP/1.1 404 Not Found\r\n" +
@@ -108,6 +154,7 @@ server.listen(4221, "localhost");
 
 
 
+
 //  TCP/IP- https://www.cloudflare.com/en-ca/learning/ddos/glossary/tcp-ip/
 //  socket.write("HTTP/1.1 200 OK\r\n\r\n"); write coket return 200 OK
 //  CRLF - https://developer.mozilla.org/en-US/docs/Glossary/CRLF
@@ -119,6 +166,8 @@ server.listen(4221, "localhost");
 // User-Agent - https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/User-Agent
 // event loop/execution model - https://developer.mozilla.org/en-US/docs/Web/JavaScript/EventLoop
 // /files/{filename} - https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/GET#syntax
+// POST /files/{filename} - https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/POST#syntax
+
 
 
 
