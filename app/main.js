@@ -4,6 +4,14 @@ const path = require("path");
 
 console.log("Logs from your program will appear here!");
 
+const args = process.argv;
+let baseDir = ".";
+
+const dirIndex = args.indexOf("--directory");
+if (dirIndex !== -1 && args[dirIndex + 1]) {
+  baseDir = args[dirIndex + 1];
+}
+
 const server = net.createServer((socket) => {
   socket.on("data", (data) => {
     const request = data.toString();
@@ -43,7 +51,6 @@ const server = net.createServer((socket) => {
       socket.end();
     } else if (method === "GET" && pathLine.startsWith("/files/")) {
       const fileName = pathLine.slice("/files/".length);
-      const baseDir = process.env.DIR || ".";
       const filePath = path.join(baseDir, fileName);
 
       fs.readFile(filePath, (err, fileContent) => {
@@ -86,6 +93,7 @@ const server = net.createServer((socket) => {
 });
 
 server.listen(4221, "localhost");
+
 
 
 
