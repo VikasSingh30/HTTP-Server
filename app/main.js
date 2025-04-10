@@ -1,4 +1,6 @@
 const net = require("net");
+const fs = require("fs");
+const path = require("path");
 
 console.log("Logs from your program will appear here!");
 
@@ -6,9 +8,9 @@ const server = net.createServer((socket) => {
   socket.on("data", (data) => {
     const request = data.toString();
     const lines = request.split("\r\n");
-    const [method, path] = lines[0].split(" ");
+    const [method, pathLine] = lines[0].split(" ");
 
-    if (method === "GET" && path === "/") {
+    if (method === "GET" && pathLine === "/") {
       const body = "Hello, world!";
       const response =
         "HTTP/1.1 200 OK\r\n" +
@@ -17,8 +19,8 @@ const server = net.createServer((socket) => {
         "\r\n" +
         body;
       socket.write(response);
-    } else if (method === "GET" && path.startsWith("/echo/")) {
-      const body = path.slice("/echo/".length);
+    } else if (method === "GET" && pathLine.startsWith("/echo/")) {
+      const body = pathLine.slice("/echo/".length);
       const response =
         "HTTP/1.1 200 OK\r\n" +
         "Content-Type: text/plain\r\n" +
@@ -26,17 +28,43 @@ const server = net.createServer((socket) => {
         "\r\n" +
         body;
       socket.write(response);
-    } else if (method === "GET" && path === "/user-agent") {
+    } else if (method === "GET" && pathLine === "/user-agent") {
       const userAgentLine = lines.find((line) => line.toLowerCase().startsWith("user-agent:"));
-      const userAgent = userAgentLine ? userAgentLine.slice("User-Agent: ".length) : "";
-      const body = userAgent.trim();
+      const userAgent = userAgentLine ? userAgentLine.slice("User-Agent: ".length).trim() : "";
       const response =
         "HTTP/1.1 200 OK\r\n" +
         "Content-Type: text/plain\r\n" +
-        `Content-Length: ${body.length}\r\n` +
+        `Content-Length: ${userAgent.length}\r\n` +
         "\r\n" +
-        body;
+        userAgent;
       socket.write(response);
+    } else if (method === "GET" && pathLine.startsWith("/files/")) {
+      const fileName = pathLine.slice("/files/".length);
+      const baseDir = process.env.DIR || "."; // fallback if DIR is not set
+      const filePath = path.join(baseDir, fileName);
+
+      fs.readFile(filePath, (err, fileContent) => {
+        if (err) {
+          const body = "Not Found";
+          const response =
+            "HTTP/1.1 404 Not Found\r\n" +
+            "Content-Type: text/plain\r\n" +
+            `Content-Length: ${body.length}\r\n` +
+            "\r\n" +
+            body;
+          socket.write(response);
+        } else {
+          const response =
+            "HTTP/1.1 200 OK\r\n" +
+            "Content-Type: application/octet-stream\r\n" +
+            `Content-Length: ${fileContent.length}\r\n` +
+            "\r\n`;
+          socket.write(response);
+          socket.write(fileContent); // send buffer directly
+        }
+        socket.end();
+      });
+      return; // prevent calling socket.end() early
     } else {
       const body = "Not Found";
       const response =
@@ -46,9 +74,8 @@ const server = net.createServer((socket) => {
         "\r\n" +
         body;
       socket.write(response);
+      socket.end();
     }
-
-    socket.end();
   });
 
   socket.on("close", () => {
@@ -69,6 +96,7 @@ server.listen(4221, "localhost");
 
 
 
+
 //  TCP/IP- https://www.cloudflare.com/en-ca/learning/ddos/glossary/tcp-ip/
 //  socket.write("HTTP/1.1 200 OK\r\n\r\n"); write coket return 200 OK
 //  CRLF - https://developer.mozilla.org/en-US/docs/Glossary/CRLF
@@ -77,6 +105,9 @@ server.listen(4221, "localhost");
     // If path is /, we return 200 OK.
    // For anything else (like /orange), we return 404 Not Found.
 // Response Body - https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#response_body
+// User-Agent - https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/User-Agent
+// event loop/execution model - https://developer.mozilla.org/en-US/docs/Web/JavaScript/EventLoop
+
 
 
 
