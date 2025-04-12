@@ -1,6 +1,7 @@
 const net = require("net");
 const fs = require("fs");
 const path = require("path");
+const zlib = require("zlib");
 
 console.log("Logs from your program will appear here!");
 
@@ -13,7 +14,7 @@ if (dirIndex !== -1 && args[dirIndex + 1]) {
 }
 
 const server = net.createServer((socket) => {
-  socket.on("data", (data) => {
+  socket.on("data", async (data) => {
     const request = data.toString();
     const [headerSection, body] = request.split("\r\n\r\n");
     const lines = headerSection.split("\r\n");
@@ -29,20 +30,34 @@ const server = net.createServer((socket) => {
     const acceptEncoding = headers["accept-encoding"] || "";
     const clientSupportsGzip = acceptEncoding.includes("gzip");
 
-    const buildResponse = (statusLine, contentType, bodyContent) => {
-      let response =
-        `${statusLine}\r\n` +
-        `Content-Type: ${contentType}\r\n`;
+    const sendResponse = (statusLine, contentType, bodyContent, isBinary = false) => {
+      const send = (finalBody) => {
+        let response =
+          `${statusLine}\r\n` +
+          `Content-Type: ${contentType}\r\n` +
+          `Content-Length: ${Buffer.byteLength(finalBody)}\r\n`;
+
+        if (clientSupportsGzip) {
+          response += `Content-Encoding: gzip\r\n`;
+        }
+
+        response += `\r\n`;
+        socket.write(response);
+        socket.write(finalBody);
+        socket.end();
+      };
 
       if (clientSupportsGzip) {
-        response += `Content-Encoding: gzip\r\n`;
+        zlib.gzip(bodyContent, (err, compressed) => {
+          if (err) {
+            socket.end(); // silently fail
+          } else {
+            send(compressed);
+          }
+        });
+      } else {
+        send(bodyContent);
       }
-
-      response += `Content-Length: ${Buffer.byteLength(bodyContent)}\r\n` +
-                  `\r\n` +
-                  bodyContent;
-
-      return response;
     };
 
     if (method === "POST" && pathLine.startsWith("/files/")) {
@@ -53,14 +68,11 @@ const server = net.createServer((socket) => {
 
       fs.writeFile(filePath, actualBody, (err) => {
         if (err) {
-          const body = "Internal Server Error";
-          const response = buildResponse("HTTP/1.1 500 Internal Server Error", "text/plain", body);
-          socket.write(response);
+          sendResponse("HTTP/1.1 500 Internal Server Error", "text/plain", "Internal Server Error");
         } else {
-          const response = "HTTP/1.1 201 Created\r\n\r\n";
-          socket.write(response);
+          socket.write("HTTP/1.1 201 Created\r\n\r\n");
+          socket.end();
         }
-        socket.end();
       });
     }
 
@@ -70,50 +82,52 @@ const server = net.createServer((socket) => {
 
       fs.readFile(filePath, (err, fileContent) => {
         if (err) {
-          const body = "Not Found";
-          const response = buildResponse("HTTP/1.1 404 Not Found", "text/plain", body);
-          socket.write(response);
+          sendResponse("HTTP/1.1 404 Not Found", "text/plain", "Not Found");
         } else {
-          let response =
-            "HTTP/1.1 200 OK\r\n" +
-            "Content-Type: application/octet-stream\r\n";
           if (clientSupportsGzip) {
-            response += "Content-Encoding: gzip\r\n";
+            zlib.gzip(fileContent, (err, compressed) => {
+              if (err) {
+                sendResponse("HTTP/1.1 500 Internal Server Error", "text/plain", "Internal Server Error");
+              } else {
+                const header =
+                  `HTTP/1.1 200 OK\r\n` +
+                  `Content-Type: application/octet-stream\r\n` +
+                  `Content-Encoding: gzip\r\n` +
+                  `Content-Length: ${compressed.length}\r\n\r\n`;
+                socket.write(header);
+                socket.write(compressed);
+                socket.end();
+              }
+            });
+          } else {
+            const header =
+              `HTTP/1.1 200 OK\r\n` +
+              `Content-Type: application/octet-stream\r\n` +
+              `Content-Length: ${fileContent.length}\r\n\r\n`;
+            socket.write(header);
+            socket.write(fileContent);
+            socket.end();
           }
-          response += `Content-Length: ${fileContent.length}\r\n\r\n`;
-          socket.write(response);
-          socket.write(fileContent);
         }
-        socket.end();
       });
     }
 
     else if (method === "GET" && pathLine.startsWith("/echo/")) {
       const body = pathLine.slice("/echo/".length);
-      const response = buildResponse("HTTP/1.1 200 OK", "text/plain", body);
-      socket.write(response);
-      socket.end();
+      sendResponse("HTTP/1.1 200 OK", "text/plain", body);
     }
 
     else if (method === "GET" && pathLine === "/user-agent") {
       const userAgent = headers["user-agent"] || "";
-      const response = buildResponse("HTTP/1.1 200 OK", "text/plain", userAgent);
-      socket.write(response);
-      socket.end();
+      sendResponse("HTTP/1.1 200 OK", "text/plain", userAgent);
     }
-    
+
     else if (method === "GET" && pathLine === "/") {
-      const body = "Hello, world!";
-      const response = buildResponse("HTTP/1.1 200 OK", "text/plain", body);
-      socket.write(response);
-      socket.end();
+      sendResponse("HTTP/1.1 200 OK", "text/plain", "Hello, world!");
     }
 
     else {
-      const body = "Not Found";
-      const response = buildResponse("HTTP/1.1 404 Not Found", "text/plain", body);
-      socket.write(response);
-      socket.end();
+      sendResponse("HTTP/1.1 404 Not Found", "text/plain", "Not Found");
     }
   });
 
@@ -123,6 +137,7 @@ const server = net.createServer((socket) => {
 });
 
 server.listen(4221, "localhost");
+
 
 
 
