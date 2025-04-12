@@ -26,23 +26,35 @@ const server = net.createServer((socket) => {
       headers[key.toLowerCase()] = value;
     });
 
+    const acceptEncoding = headers["accept-encoding"] || "";
+    const clientSupportsGzip = acceptEncoding.includes("gzip");
+
+    const buildResponse = (statusLine, contentType, bodyContent) => {
+      let response =
+        `${statusLine}\r\n` +
+        `Content-Type: ${contentType}\r\n`;
+
+      if (clientSupportsGzip) {
+        response += `Content-Encoding: gzip\r\n`;
+      }
+
+      response += `Content-Length: ${Buffer.byteLength(bodyContent)}\r\n` +
+                  `\r\n` +
+                  bodyContent;
+
+      return response;
+    };
+
     if (method === "POST" && pathLine.startsWith("/files/")) {
       const fileName = pathLine.slice("/files/".length);
       const filePath = path.join(baseDir, fileName);
       const contentLength = parseInt(headers["content-length"] || "0");
-
-      // Extract exact body based on Content-Length
       const actualBody = body.slice(0, contentLength);
 
       fs.writeFile(filePath, actualBody, (err) => {
         if (err) {
           const body = "Internal Server Error";
-          const response =
-            "HTTP/1.1 500 Internal Server Error\r\n" +
-            "Content-Type: text/plain\r\n" +
-            `Content-Length: ${body.length}\r\n` +
-            "\r\n" +
-            body;
+          const response = buildResponse("HTTP/1.1 500 Internal Server Error", "text/plain", body);
           socket.write(response);
         } else {
           const response = "HTTP/1.1 201 Created\r\n\r\n";
@@ -52,7 +64,6 @@ const server = net.createServer((socket) => {
       });
     }
 
-    // GET /files/{filename}
     else if (method === "GET" && pathLine.startsWith("/files/")) {
       const fileName = pathLine.slice("/files/".length);
       const filePath = path.join(baseDir, fileName);
@@ -60,19 +71,16 @@ const server = net.createServer((socket) => {
       fs.readFile(filePath, (err, fileContent) => {
         if (err) {
           const body = "Not Found";
-          const response =
-            "HTTP/1.1 404 Not Found\r\n" +
-            "Content-Type: text/plain\r\n" +
-            `Content-Length: ${body.length}\r\n` +
-            "\r\n" +
-            body;
+          const response = buildResponse("HTTP/1.1 404 Not Found", "text/plain", body);
           socket.write(response);
         } else {
-          const response =
+          let response =
             "HTTP/1.1 200 OK\r\n" +
-            "Content-Type: application/octet-stream\r\n" +
-            `Content-Length: ${fileContent.length}\r\n` +
-            "\r\n";
+            "Content-Type: application/octet-stream\r\n";
+          if (clientSupportsGzip) {
+            response += "Content-Encoding: gzip\r\n";
+          }
+          response += `Content-Length: ${fileContent.length}\r\n\r\n`;
           socket.write(response);
           socket.write(fileContent);
         }
@@ -80,54 +88,30 @@ const server = net.createServer((socket) => {
       });
     }
 
-    // /echo/{str}
     else if (method === "GET" && pathLine.startsWith("/echo/")) {
       const body = pathLine.slice("/echo/".length);
-      const response =
-        "HTTP/1.1 200 OK\r\n" +
-        "Content-Type: text/plain\r\n" +
-        `Content-Length: ${body.length}\r\n` +
-        "\r\n" +
-        body;
+      const response = buildResponse("HTTP/1.1 200 OK", "text/plain", body);
       socket.write(response);
       socket.end();
     }
 
-    // /user-agent
     else if (method === "GET" && pathLine === "/user-agent") {
       const userAgent = headers["user-agent"] || "";
-      const response =
-        "HTTP/1.1 200 OK\r\n" +
-        "Content-Type: text/plain\r\n" +
-        `Content-Length: ${userAgent.length}\r\n` +
-        "\r\n" +
-        userAgent;
+      const response = buildResponse("HTTP/1.1 200 OK", "text/plain", userAgent);
       socket.write(response);
       socket.end();
     }
-
-    // GET /
+    
     else if (method === "GET" && pathLine === "/") {
       const body = "Hello, world!";
-      const response =
-        "HTTP/1.1 200 OK\r\n" +
-        "Content-Type: text/plain\r\n" +
-        `Content-Length: ${body.length}\r\n` +
-        "\r\n" +
-        body;
+      const response = buildResponse("HTTP/1.1 200 OK", "text/plain", body);
       socket.write(response);
       socket.end();
     }
 
-    // 404
     else {
       const body = "Not Found";
-      const response =
-        "HTTP/1.1 404 Not Found\r\n" +
-        "Content-Type: text/plain\r\n" +
-        `Content-Length: ${body.length}\r\n` +
-        "\r\n" +
-        body;
+      const response = buildResponse("HTTP/1.1 404 Not Found", "text/plain", body);
       socket.write(response);
       socket.end();
     }
@@ -139,6 +123,7 @@ const server = net.createServer((socket) => {
 });
 
 server.listen(4221, "localhost");
+
 
 
 
