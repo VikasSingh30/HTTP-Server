@@ -25,19 +25,6 @@ Welcome to the world of building your own HTTP server! This project showcases a 
 
 ---
 
-## 🏗️ **Project Structure** 🗂️
-
-```plaintext
-📂 **custom-http-server** 
-  ├──📄 **server.js** 
-├──📂 **node_modules**  
-├──📂 **package-lock.json**   
-├──📂 **package.json**   
-├──📄 **README.md**  
-
-
----
-
 ##🏆 **Stages**
 
 | Stage | Description |
@@ -114,3 +101,15 @@ The following dependencies are used in this project:
 * ✔️ **zlib** (for GZIP compression)  
 * ✔️ **fs** (for file handling)  
 * ✔️ **path** (for path management)  
+
+---
+
+## 🏗️ **Project Structure** 🗂️
+
+```plaintext
+📂 **custom-http-server** 
+  ├──📄 **server.js** 
+├──📂 **node_modules**  
+├──📂 **package-lock.json**   
+├──📂 **package.json**   
+├──📄 **README.md**  
