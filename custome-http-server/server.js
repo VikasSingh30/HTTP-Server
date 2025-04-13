@@ -1,24 +1,33 @@
-const net = require("net");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
+const WebSocket = require("ws");
+const cookie = require("cookie");
+const basicAuth = require("express-basic-auth");
+const winston = require("winston"); // For logging
 
-console.log("Logs from your program will appear here!");
+// SSL certificates for HTTPS
+const options = {
+  key: fs.readFileSync("server-key.pem"),
+  cert: fs.readFileSync("server-cert.pem"),
+};
 
-const args = process.argv;
-let baseDir = ".";
+// Initialize Winston logger
+const logger = winston.createLogger({
+  level: "info",
+  transports: [
+    new winston.transports.Console({ format: winston.format.simple() }),
+    new winston.transports.File({ filename: "server.log", level: "info" })
+  ]
+});
 
-const dirIndex = args.indexOf("--directory");
-if (dirIndex !== -1 && args[dirIndex + 1]) {
-  baseDir = args[dirIndex + 1];
-}
-
-const server = net.createServer((socket) => {
+const server = https.createServer(options, (req, res) => {
   let buffer = "";
 
-  socket.on("data", (chunk) => {
+  // Parse incoming request
+  req.on("data", (chunk) => {
     buffer += chunk.toString();
-
     while (true) {
       const headerEnd = buffer.indexOf("\r\n\r\n");
       if (headerEnd === -1) break;
@@ -26,7 +35,6 @@ const server = net.createServer((socket) => {
       const headerSection = buffer.slice(0, headerEnd);
       const lines = headerSection.split("\r\n");
       const [method, pathLine] = lines[0].split(" ");
-
       const headers = {};
       lines.slice(1).forEach((line) => {
         const [key, value] = line.split(": ");
@@ -63,15 +71,15 @@ const server = net.createServer((socket) => {
           }
 
           response += `\r\n`;
-          socket.write(response);
-          socket.write(finalBody);
-          if (close) socket.end();
+          res.write(response);
+          res.write(finalBody);
+          if (close) res.end();
         };
 
         if (clientSupportsGzip) {
           zlib.gzip(bodyContent, (err, compressed) => {
             if (err) {
-              socket.end();
+              res.end();
             } else {
               send(compressed);
             }
@@ -83,23 +91,45 @@ const server = net.createServer((socket) => {
 
       const shouldClose = headers["connection"]?.toLowerCase() === "close";
 
+      // Implement caching (Cache-Control and ETag)
+      const generateETag = (content) => {
+        return require("crypto").createHash("md5").update(content).digest("hex");
+      };
+
+      const cacheControl = (req, res, next) => {
+        res.setHeader("Cache-Control", "public, max-age=3600"); // Cache for 1 hour
+        next();
+      };
+
+      const etagMiddleware = (req, res, next) => {
+        const body = 'response body here'; // The actual response body you are sending
+        const etag = generateETag(body);
+        if (req.headers["if-none-match"] === etag) {
+          res.status(304).end(); // If the content hasn't changed, send a 304
+        } else {
+          res.setHeader("ETag", etag);
+          next();
+        }
+      };
+
+      // Handling GET, POST, PUT, DELETE, and other HTTP methods
       if (method === "POST" && pathLine.startsWith("/files/")) {
         const fileName = pathLine.slice("/files/".length);
-        const filePath = path.join(baseDir, fileName);
+        const filePath = path.join(__dirname, fileName);
 
         fs.writeFile(filePath, body, (err) => {
           if (err) {
             sendResponse("HTTP/1.1 500 Internal Server Error", "text/plain", "Internal Server Error", false, shouldClose);
           } else {
-            socket.write("HTTP/1.1 201 Created\r\n\r\n");
-            if (shouldClose) socket.end();
+            res.write("HTTP/1.1 201 Created\r\n\r\n");
+            if (shouldClose) res.end();
           }
         });
       }
 
       else if (method === "GET" && pathLine.startsWith("/files/")) {
         const fileName = pathLine.slice("/files/".length);
-        const filePath = path.join(baseDir, fileName);
+        const filePath = path.join(__dirname, fileName);
 
         fs.readFile(filePath, (err, fileContent) => {
           if (err) {
@@ -115,10 +145,10 @@ const server = net.createServer((socket) => {
                     `Content-Type: application/octet-stream\r\n` +
                     `Content-Encoding: gzip\r\n` +
                     `Content-Length: ${compressed.length}\r\n` +
-                    `${shouldClose ? 'Connection: close' : 'Connection: keep-alive'}\r\n\r\n`;
-                  socket.write(header);
-                  socket.write(compressed);
-                  if (shouldClose) socket.end();
+                    `${shouldClose ? "Connection: close" : "Connection: keep-alive"}\r\n\r\n`;
+                  res.write(header);
+                  res.write(compressed);
+                  if (shouldClose) res.end();
                 }
               });
             } else {
@@ -126,25 +156,43 @@ const server = net.createServer((socket) => {
                 `HTTP/1.1 200 OK\r\n` +
                 `Content-Type: application/octet-stream\r\n` +
                 `Content-Length: ${fileContent.length}\r\n` +
-                `${shouldClose ? 'Connection: close' : 'Connection: keep-alive'}\r\n\r\n`;
-              socket.write(header);
-              socket.write(fileContent);
-              if (shouldClose) socket.end();
+                `${shouldClose ? "Connection: close" : "Connection: keep-alive"}\r\n\r\n`;
+              res.write(header);
+              res.write(fileContent);
+              if (shouldClose) res.end();
             }
           }
         });
       }
 
-      else if (method === "GET" && pathLine.startsWith("/echo/")) {
-        const responseText = pathLine.slice("/echo/".length);
-        sendResponse("HTTP/1.1 200 OK", "text/plain", responseText, false, shouldClose);
+      // Implement PUT and DELETE methods
+      else if (method === "PUT" && pathLine.startsWith("/files/")) {
+        const fileName = pathLine.slice("/files/".length);
+        const filePath = path.join(__dirname, fileName);
+
+        fs.writeFile(filePath, body, (err) => {
+          if (err) {
+            sendResponse("HTTP/1.1 500 Internal Server Error", "text/plain", "Internal Server Error", false, shouldClose);
+          } else {
+            sendResponse("HTTP/1.1 200 OK", "text/plain", "File Updated", false, shouldClose);
+          }
+        });
       }
 
-      else if (method === "GET" && pathLine === "/user-agent") {
-        const userAgent = headers["user-agent"] || "";
-        sendResponse("HTTP/1.1 200 OK", "text/plain", userAgent, false, shouldClose);
+      else if (method === "DELETE" && pathLine.startsWith("/files/")) {
+        const fileName = pathLine.slice("/files/".length);
+        const filePath = path.join(__dirname, fileName);
+
+        fs.unlink(filePath, (err) => {
+          if (err) {
+            sendResponse("HTTP/1.1 500 Internal Server Error", "text/plain", "Internal Server Error", false, shouldClose);
+          } else {
+            sendResponse("HTTP/1.1 200 OK", "text/plain", "File Deleted", false, shouldClose);
+          }
+        });
       }
 
+      // Default GET request handling
       else if (method === "GET" && pathLine === "/") {
         sendResponse("HTTP/1.1 200 OK", "text/plain", "Hello, world!", false, shouldClose);
       }
@@ -154,9 +202,38 @@ const server = net.createServer((socket) => {
       }
     }
   });
+
+  // CORS - Allow cross-origin requests
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // WebSocket support (if needed)
+  const wss = new WebSocket.Server({ noServer: true });
+  wss.on("connection", (ws) => {
+    ws.on("message", (message) => {
+      console.log(`Received: ${message}`);
+    });
+    ws.send("Hello from WebSocket!");
+  });
+
+  // Handle WebSocket Upgrade
+  server.on("upgrade", (req, socket, head) => {
+    const acceptHeader = req.headers["sec-websocket-version"];
+    if (acceptHeader) {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit("connection", ws, req);
+      });
+    }
+  });
 });
 
-server.listen(4221, "localhost");
+// Server listening
+server.listen(4221, "localhost", () => {
+  console.log("Server is running on https://localhost:4221");
+});
+
+
 
 
 
@@ -201,44 +278,5 @@ server.listen(4221, "localhost");
 // E-Tag caching - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
 // Persistent Connections - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Connection
 
-// Chunked Transfer Encoding
-// In this challenge extension, you'll implement chunked transfer encoding to stream response bodies when the total size isn't known beforehand.
-// Along the way, you'll learn about the Transfer-Encoding: chunked header, chunk formatting rules, handling streaming data and more.
 
-
-// Query Params
-// In this challenge extension, you'll add support for parsing query params from request URLs.
-// Along the way, you'll learn about query param syntax, parsing key-value pairs (handling & and =), performing URL decoding and more.
-
-// Cookies
-// In this challenge extension, you'll implement cookie-based session management to maintain user state across multiple HTTP requests.
-// Along the way, you'll learn about the Cookie & Set-Cookie headers (including attributes like Expires, HttpOnly, Secure, SameSite) and more.
-
-// CORS
-// In this challenge extension, you'll implement CORS (Cross-Origin Resource Sharing) to allow web browsers from different origins to securely access your server's resources.
-// Along the way, you'll learn about the Origin request header, preflight CORS requests, various Access-Control-Allow-* response headers and more.
-
-// TLS
-// In this challenge extension, you'll add support for secure HTTPS connections by integrating TLS (Transport Layer Security).
-// Along the way, you'll learn about managing certificates, the TLS handshake process, how to use TLS libraries/modules and more.
-
-// HTTP/2
-// In this challenge extension, you'll upgrade your server to support the HTTP/2 protocol.
-// Along the way, you'll learn about the Upgrade header, HTTP/2 concepts like binary framing, streams, multiplexing, flow control and more.
-
-// WebSockets
-// In this challenge extension, you'll extend your server to handle WebSocket connections for real-time, bidirectional communication.
-// Along the way, you'll learn about the HTTP Upgrade mechanism, the WebSocket handshake process, the 101 Switching Protocols status code and more.
-
-// Basic Authentication
-// In this challenge extension, you'll implement HTTP Basic Authentication to password-protect specific server resources.
-// Along the way, you'll learn about the Authorization & WWW-Authenticate headers, the 401 Unauthorized status code and more.
-
-// Range requests
-// In this challenge extension, you'll add support for HTTP range requests to your server.
-// Along the way, you'll learn about the Range and Content-Range headers, how to handle partial content requests and more.
-
-// E-Tag caching
-// In this challenge extension, you'll implement E-Tag caching in your HTTP server.
-// Along the way, you'll learn about the ETag header, the If-None-Match header, and how E-Tags are used for caching HTTP response.
 

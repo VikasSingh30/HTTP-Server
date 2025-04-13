@@ -1,15 +1,26 @@
 {
-    "name": "@codecrafters/build-your-own-http-server",
+    "name": "custom-http-server",
     "version": "1.0.0",
-    "description": "Build your own HTTP-Server challenge, from CodeCrafters",
-    "main": "main.js",
+    "description": "A custom HTTP server built in Node.js with WebSocket, cookies, and basic authentication",
+    "main": "server.js",
     "scripts": {
-        "dev": "node app/main.js"
+        "dev": "node server.js"
     },
     "keywords": [
-        "build-your-own-x"
+        "http-server",
+        "nodejs",
+        "websockets",
+        "cookies",
+        "basic-authentication"
     ],
     "author": "",
     "license": "MIT",
-    "dependencies": {}
+    "dependencies": {
+        "cookie": "^1.0.2",
+        "express-basic-auth": "^1.2.1",
+        "passport": "^0.7.0",
+        "passport-oauth": "^1.0.0",
+        "winston": "^3.17.0",
+        "ws": "^8.18.1"
+    }
 }
